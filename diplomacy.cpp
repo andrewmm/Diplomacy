@@ -23,6 +23,7 @@ void parse_order_file(DiplomacyGame *game, char *filename) {
 int main(int argc, char **argv) {
 	assert(argc >= 2);
 	DiplomacyGame *current = new DiplomacyGame((char *) argv[1]);
+	DiplomacyGame *root = current;
 	current->display();
 	printf("PROCESSING ORDER FILES....\n");
 	for (int i = 2; i < argc; ++i) {
@@ -31,13 +32,13 @@ int main(int argc, char **argv) {
 	printf("PRELIMINARY RESOLUTION....\n");
 	while (true) {
 		current->resolve();
-		if (current->pass()) {
+		DiplomacyGame *next = current->pass();
+		if (next == NULL) {
 			break;
 		}
 		printf("BRANCH DID NOT PASS. BACKTRACKING.\n\n");
 		DiplomacyGame *temp = current;
-		current = current->check_alternate();
-		delete temp;
+		current = next;
 	}
 	printf("DONE WITH RESOLUTION.\n\n");
 	current->display();

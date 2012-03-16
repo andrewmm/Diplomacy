@@ -81,6 +81,12 @@ void DiplomacyPiece::set_location(DiplomacyRegion *loc) {
     location = loc;
 }
 
+void DiplomacyPiece::change_to_hold() {
+    set_move_type(0);
+    set_move_target(check_location());
+    check_location()->set_occupier_defending(true);
+}
+
 //
 // access functions
 //

@@ -33,10 +33,7 @@ DiplomacyRegion::DiplomacyRegion(const DiplomacyRegion& old, DiplomacyGame *newg
 
     occupiers.resize(old.occupiers.size(), NULL);
     for (int i = 0; i < occupiers.size(); ++i) {
-        char *ownername = old.occupiers[i]->check_owner()->check_name();
-        DiplomacyPlayer *owner = game->get_player_by_num(game->get_player_num_by_name(ownername));
-        DiplomacyPiece *piece = owner->check_pieces()[old.occupiers[i]->check_self_num()];
-        occupiers[i] = piece;
+        occupiers[i] = game->find_copied_piece(old.occupiers[i]);
     }
 
     coast = old.coast;
@@ -49,62 +46,29 @@ DiplomacyRegion::DiplomacyRegion(const DiplomacyRegion& old, DiplomacyGame *newg
     defending_support.resize(old.defending_support.size(), NULL);
     for (int i = 0; i < defending_support.size(); ++i) {
         support *cpy_supp = new support;
-
-        char *owner1name = old.defending_support[i]->supporter->check_owner()->check_name();
-        DiplomacyPlayer *owner1 = game->get_player_by_num(game->get_player_num_by_name(owner1name));
-        DiplomacyPiece *piece1 = owner1->check_pieces()[old.defending_support[i]->supporter->check_self_num()];
-
-        char *owner2name = old.defending_support[i]->supported->check_owner()->check_name();
-        DiplomacyPlayer *owner2 = game->get_player_by_num(game->get_player_num_by_name(owner2name));
-        DiplomacyPiece *piece2 = owner2->check_pieces()[old.defending_support[i]->supported->check_self_num()];
-
-        cpy_supp->supporter = piece1;
-        cpy_supp->supported = piece2;
-
+        cpy_supp->supporter = game->find_copied_piece(old.defending_support[i]->supporter);
+        cpy_supp->supported = game->find_copied_piece(old.defending_support[i]->supported);
         defending_support[i] = cpy_supp;
     }
 
     attacking_pieces.resize(old.attacking_pieces.size(), NULL);
     for (int i = 0; i < attacking_pieces.size(); ++i) {
-        char *ownername = old.attacking_pieces[i]->check_owner()->check_name();
-        DiplomacyPlayer *owner = game->get_player_by_num(game->get_player_num_by_name(ownername));
-        DiplomacyPiece *piece = owner->check_pieces()[old.attacking_pieces[i]->check_self_num()];
-        attacking_pieces[i] = piece;
+        attacking_pieces[i] = game->find_copied_piece(old.attacking_pieces[i]);
     }
 
     attacking_support.resize(old.attacking_support.size(), NULL);
     for (int i = 0; i < attacking_support.size(); ++i) {
         support *cpy_supp = new support;
-
-        char *owner1name = old.attacking_support[i]->supporter->check_owner()->check_name();
-        DiplomacyPlayer *owner1 = game->get_player_by_num(game->get_player_num_by_name(owner1name));
-        DiplomacyPiece *piece1 = owner1->check_pieces()[old.attacking_support[i]->supporter->check_self_num()];
-
-        char *owner2name = old.attacking_support[i]->supported->check_owner()->check_name();
-        DiplomacyPlayer *owner2 = game->get_player_by_num(game->get_player_num_by_name(owner2name));
-        DiplomacyPiece *piece2 = owner2->check_pieces()[old.attacking_support[i]->supported->check_self_num()];
-
-        cpy_supp->supporter = piece1;
-        cpy_supp->supported = piece2;
-
+        cpy_supp->supporter = game->find_copied_piece(old.attacking_support[i]->supporter);
+        cpy_supp->supported = game->find_copied_piece(old.attacking_support[i]->supported);
         attacking_support[i] = cpy_supp;
     }
 
     attacking_convoys.resize(old.attacking_convoys.size(), NULL);
     for (int i = 0; i < attacking_convoys.size(); ++i) {
         convoy *cpy_conv = new convoy;
-
-        char *owner1name = old.attacking_convoys[i]->convoyer->check_owner()->check_name();
-        DiplomacyPlayer *owner1 = game->get_player_by_num(game->get_player_num_by_name(owner1name));
-        DiplomacyPiece *piece1 = owner1->check_pieces()[old.attacking_convoys[i]->convoyer->check_self_num()];
-
-        char *owner2name = old.attacking_convoys[i]->convoyed->check_owner()->check_name();
-        DiplomacyPlayer *owner2 = game->get_player_by_num(game->get_player_num_by_name(owner2name));
-        DiplomacyPiece *piece2 = owner2->check_pieces()[old.attacking_convoys[i]->convoyed->check_self_num()];
-
-        cpy_conv->convoyer = piece1;
-        cpy_conv->convoyed = piece2;
-
+        cpy_conv->convoyer = game->find_copied_piece(old.attacking_convoys[i]->convoyer);
+        cpy_conv->convoyed = game->find_copied_piece(old.attacking_convoys[i]->convoyed);
         attacking_convoys[i] = cpy_conv;
     }
 }
@@ -147,24 +111,23 @@ void DiplomacyRegion::clear_region() {
 }
 
 void DiplomacyRegion::clear_move_records() {
-    clear_move_records_no_convoy();
+    clear_attacker_records();
     while (!attacking_convoys.empty()) {
         delete attacking_convoys.back();
         attacking_convoys.pop_back();
-    }
-}
-
-void DiplomacyRegion::clear_move_records_no_convoy() {
-    attacking_pieces.clear();
-    occupier_defending = false;
-    while (!defending_support.empty()) {
-        delete defending_support.back();
-        defending_support.pop_back();
     }
     while (!attacking_support.empty()) {
         delete attacking_support.back();
         attacking_support.pop_back();
     }
+    while (!defending_support.empty()) {
+        delete defending_support.back();
+        defending_support.pop_back();
+    }
+}
+
+void DiplomacyRegion::clear_attacker_records() {
+    attacking_pieces.clear();
 }
 
 //
@@ -353,7 +316,7 @@ void DiplomacyRegion::cull_convoys() {
 // TODO need to check if it's coming from region adjacent to a coast
 void DiplomacyRegion::cull_support() {
     for (int i = 0; i < attacking_support.size(); ++i) {
-        if (!game->check_if_adj(attacking_support[i]->supporter->check_location(),this)) {
+        if (!game->check_if_supp_adj(attacking_support[i]->supporter->check_location(),this)) {
             fprintf(stderr,"Attempt by unit in %s to support attack on non-adjacent region %s.\n",
                 attacking_support[i]->supporter->check_location()->check_names()[0],
                 names[0]);
@@ -366,7 +329,7 @@ void DiplomacyRegion::cull_support() {
         }
     }
     for (int i = 0; i < defending_support.size(); ++i) {
-        if (!game->check_if_adj(defending_support[i]->supporter->check_location(),this)) {
+        if (!game->check_if_supp_adj(defending_support[i]->supporter->check_location(),this)) {
             fprintf(stderr,"Attempt by unit in %s to support defense in non-adjacent region %s.\n",
                 defending_support[i]->supporter->check_location()->check_names()[0],
                 names[0]);

@@ -39,9 +39,17 @@ typedef struct safe_support {
     DiplomacyPiece *safe_supporter;
 } safe_support;
 
+typedef struct dislodgment {
+    DiplomacyPiece *dislodged;
+    DiplomacyRegion *by;
+} dislodgment;
+
 typedef enum conditiontype {
     convoy_condition,
-    moved_condition
+    support_condition,
+    moved_condition,
+    no_trade_condition,
+    not_dislodged_condition
 } conditiontype;
 
 extern DiplomacyGame *bison_box; // parser will store things here
@@ -52,7 +60,7 @@ class AndCondition {
 public:
     DiplomacyGame *game;
     std::vector<OrCondition> terms;
-    bool pass();
+    DiplomacyGame *pass();
     AndCondition();
     AndCondition(DiplomacyGame *gamep);
     AndCondition(const AndCondition& old, DiplomacyGame *newgame);
@@ -62,7 +70,7 @@ class OrCondition {
 public:
     DiplomacyGame *game;
     std::vector<ConditionBox> factors;
-    bool pass();
+    DiplomacyGame *pass();
     OrCondition(DiplomacyGame *gamep);
     OrCondition(const OrCondition& old, DiplomacyGame *newgame);
 };
@@ -70,24 +78,65 @@ public:
 class ConvoyCondition {
 public:
     DiplomacyGame *game;
+    DiplomacyGame *alternate;
     DiplomacyPiece *forpiece;
     DiplomacyRegion *from;
     DiplomacyRegion *to;
 
-    bool pass();
+    DiplomacyGame *pass();
     ConvoyCondition(DiplomacyGame *gamep, DiplomacyPiece *forpiecep, DiplomacyRegion *fromp, DiplomacyRegion *top);
     ConvoyCondition(const ConvoyCondition& old, DiplomacyGame *newgame);
+};
+
+class SupportCondition {
+public:
+    DiplomacyGame *game;
+    DiplomacyGame *alternate;
+    DiplomacyRegion *in;
+    DiplomacyPiece *forpiece;
+    DiplomacyPiece *frompiece;
+
+    DiplomacyGame *pass();
+    SupportCondition(DiplomacyGame *gamep, DiplomacyRegion *inp, DiplomacyPiece *forp, DiplomacyPiece *fromp);
+    SupportCondition(const SupportCondition& old, DiplomacyGame *newgame);
 };
 
 class MovedCondition {
 public:
     DiplomacyGame *game;
+    DiplomacyGame *alternate;
     DiplomacyPiece *piece;
     DiplomacyRegion *from;
 
-    bool pass();
+    DiplomacyGame *pass();
     MovedCondition(DiplomacyGame *gamep, DiplomacyPiece *piecep, DiplomacyRegion *fromp);
     MovedCondition(const MovedCondition& old, DiplomacyGame *newgame);
+};
+
+class NoTradeCondition {
+public:
+    DiplomacyGame *game;
+    DiplomacyGame *alternate;
+    DiplomacyPiece *piece1;
+    DiplomacyRegion *reg1;
+    DiplomacyPiece *piece2;
+    DiplomacyRegion *reg2;
+
+    DiplomacyGame *pass();
+    NoTradeCondition(DiplomacyGame *gamep, DiplomacyPiece *piece1p, DiplomacyPiece *piece2p);
+    NoTradeCondition(const NoTradeCondition& old, DiplomacyGame *newgame);
+};
+
+class NotDislodgedByCondition {
+public:
+    DiplomacyGame *game;
+    DiplomacyGame *alternate;
+    DiplomacyPiece *piece;
+    DiplomacyRegion *by;
+
+    DiplomacyGame *pass();
+    NotDislodgedByCondition(DiplomacyGame *gamep, DiplomacyPiece *piecep, DiplomacyRegion *byp);
+    NotDislodgedByCondition(const NotDislodgedByCondition& old, DiplomacyGame *newgame);
 };
 
 class ConditionBox {
@@ -95,10 +144,13 @@ public:
     DiplomacyGame *game;
     conditiontype cond_type;
     std::vector<ConvoyCondition> convoy_cond;
+    std::vector<SupportCondition> supp_cond;
     std::vector<MovedCondition> moved_cond;
-    bool pass();
+    std::vector<NoTradeCondition> no_trade_cond;
+    std::vector<NotDislodgedByCondition> not_disl_cond;
+    DiplomacyGame *pass(); // TODO update
     ConditionBox(DiplomacyGame *gamep, conditiontype ctype);
-    ConditionBox(const ConditionBox& old, DiplomacyGame *newgame);
+    ConditionBox(const ConditionBox& old, DiplomacyGame *newgame); // TODO UPDATE
 };
 
 class DiplomacyGame {
@@ -112,6 +164,8 @@ private:
     DiplomacyGame *alternate;
     std::vector<safe_support> safe_supports;
     std::vector<DiplomacyPiece *> req_retreats;
+    std::vector<dislodgment> dislodgments; // TODO update copy constructor
+                                            // TODO populate this at appropriate times
 public:
     DiplomacyGame(char *filename);
     DiplomacyGame();
@@ -140,16 +194,25 @@ public:
     bool check_if_adj(DiplomacyRegion *source, DiplomacyRegion *target);
     bool check_if_supp_adj(DiplomacyRegion *source, DiplomacyRegion *target);
     DiplomacyGame *check_alternate();
+    DiplomacyPiece *find_copied_piece(DiplomacyPiece *oldpiece);
+    std::vector<dislodgment> check_dislodgments();
 
     // move handling
-    //int record_move(DiplomacyPiece *piece, int move, DiplomacyRegion *target);
+    void branch();
     void resolve();
     void add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp);
+
+    void add_condition(conditiontype ctype);
     void add_convoy_condition(DiplomacyPiece *piece, DiplomacyRegion *fromp, DiplomacyRegion *top);
+    void add_support_condition(DiplomacyRegion *region, support *req_support);
     void add_moved_condition(DiplomacyPiece *piecep, DiplomacyRegion *fromp);
+    void add_no_trade_condition(DiplomacyPiece *piece1p, DiplomacyPiece *piece2p);
+    void add_no_trade_or_convoy_condition(DiplomacyPiece *piece1, DiplomacyPiece *piece2);
+    void add_not_dislodged_by_condition(DiplomacyPiece *piecep, DiplomacyRegion *byp);
+
     bool is_sea_path(DiplomacyRegion *start, DiplomacyRegion *end, const std::vector<DiplomacyRegion *>& steps);
     void add_retreat(DiplomacyPiece *retreater);
-    bool pass();
+    DiplomacyGame *pass();
 
     // command line display:
     void display();
@@ -206,7 +269,7 @@ public:
     void copy_region_pointers(const DiplomacyRegion& old);
     void clear_region();
     void clear_move_records();
-    void clear_move_records_no_convoy();
+    void clear_attacker_records();
 
     // game setup:
     void add_abbrv(char *abbrv);
@@ -276,6 +339,7 @@ public:
 
     // move resolution
     void set_location(DiplomacyRegion *loc);
+    void change_to_hold();
 
     // access
     DiplomacyRegion *check_location();

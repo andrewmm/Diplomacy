@@ -28,14 +28,14 @@ DiplomacyGame::DiplomacyGame() {
 
 DiplomacyGame::DiplomacyGame(const DiplomacyGame& old) {
     season = old.season;
+    alternate = old.alternate;
     player_list.resize(old.player_list.size(), NULL);
     for (int i = 0; i < player_list.size(); ++i) {
         player_list[i] = new DiplomacyPlayer(*(old.player_list[i]),this);
     }
     req_retreats.resize(old.req_retreats.size(), NULL);
     for (int i = 0; i < req_retreats.size(); ++i) {
-        req_retreats[i] = get_player_by_num(get_player_num_by_name(old.req_retreats[i]->check_owner()->check_name()))->check_pieces()
-                        [old.req_retreats[i]->check_self_num()];
+        req_retreats[i] = find_copied_piece(old.req_retreats[i]);
     }
 
     region_list.resize(old.region_list.size(), NULL);
@@ -51,13 +51,10 @@ DiplomacyGame::DiplomacyGame(const DiplomacyGame& old) {
         }
     }
     conditions = AndCondition(old.conditions, this);
-    alternate = old.alternate;
     safe_supports.resize(old.safe_supports.size());
     for (int i = 0; i < safe_supports.size(); ++i) {
-        safe_supports[i].attacker = get_player_by_num(get_player_num_by_name(old.safe_supports[i].attacker->check_owner()->
-                check_name()))->check_pieces()[old.safe_supports[i].attacker->check_self_num()];
-        safe_supports[i].safe_supporter = get_player_by_num(get_player_num_by_name(old.safe_supports[i].safe_supporter->
-                check_owner()->check_name()))->check_pieces()[old.safe_supports[i].safe_supporter->check_self_num()];
+        safe_supports[i].attacker = find_copied_piece(old.safe_supports[i].attacker);
+        safe_supports[i].safe_supporter = find_copied_piece(old.safe_supports[i].safe_supporter);
     }
 }
 
@@ -287,9 +284,23 @@ DiplomacyGame *DiplomacyGame::check_alternate() {
     return alternate;
 }
 
+DiplomacyPiece *DiplomacyGame::find_copied_piece(DiplomacyPiece *oldpiece) {
+    return get_player_by_num(get_player_num_by_name(oldpiece->check_owner()->check_name()))->check_pieces()[oldpiece->check_self_num()];
+}
+
+std::vector<dislodgment> DiplomacyGame::check_dislodgments() {
+    return dislodgments;
+}
+
 //
 // move handling functions
 //
+
+// branch off a copy
+void DiplomacyGame::branch() {
+    DiplomacyGame *branch = new DiplomacyGame(*this);
+    alternate = branch;
+}
 
 // TODO: in progress
 void DiplomacyGame::resolve() {
@@ -315,8 +326,7 @@ void DiplomacyGame::resolve() {
         for (int j = 0; j < all_occupiers.size(); ++j) {
             // Things without an order hold
             if (all_occupiers[j]->check_move_type() == -1) {
-                all_occupiers[j]->set_move_type(0);
-                all_occupiers[j]->set_move_target(all_occupiers[j]->check_location());
+                all_occupiers[j]->change_to_hold();
             }
 
             // Things which are holding must do it to their own location
@@ -336,13 +346,11 @@ void DiplomacyGame::resolve() {
                         (all_occupiers[j]->check_type() == 0 && all_occupiers[j]->check_location()->check_coasts().size() == 0))
                     && all_occupiers[j]->check_move_type() == 2) {
                 if (!check_if_adj(all_occupiers[j]->check_location(), all_occupiers[j]->check_move_target())) {
-                    fprintf(stderr,"Fleet or non-coastal army in %s tried to affect non-adjacent region %s.\n",
+                    fprintf(stderr,"Fleet or non-coastal army in %s tried to attack non-adjacent region %s.\n",
                             all_occupiers[j]->check_location()->check_names()[0],
                             all_occupiers[j]->check_move_target()->check_names()[0]);
                     all_occupiers[j]->check_move_target()->remove_attacker(all_occupiers[j]);
-                    all_occupiers[j]->set_move_type(0);
-                    all_occupiers[j]->set_move_target(all_occupiers[j]->check_location());
-                    all_occupiers[j]->check_location()->set_occupier_defending(true);
+                    all_occupiers[j]->change_to_hold();
                 }
             }
 
@@ -354,9 +362,74 @@ void DiplomacyGame::resolve() {
                         all_occupiers[j]->check_location()->check_names()[0],
                         all_occupiers[j]->check_move_target()->check_names()[0]);
                     all_occupiers[j]->check_move_target()->remove_attacker(all_occupiers[j]);
-                    all_occupiers[j]->set_move_type(0);
-                    all_occupiers[j]->set_move_target(all_occupiers[j]->check_location());
-                    all_occupiers[j]->check_location()->set_occupier_defending(true);
+                    all_occupiers[j]->change_to_hold();
+                }
+            }
+
+            // TODO: trading places/affecting dislodger stuff
+            if (all_occupiers[j]->check_move_type() != 0 && all_occupiers[j]->check_move_target()->occupied()) {
+                DiplomacyPiece *j_potential_trader = all_occupiers[j]->check_move_target()->check_occupier();
+                if (j_potential_trader->check_move_type() == 2 && j_potential_trader->check_move_target()->check_occupier() == 
+                        all_occupiers[j]) {
+                    // Potential for j_potential_trader to dislodge all_occupiers[j]. Branch on that
+                    fprintf(stderr,"Unit in %s could be dislodged by unit in %s. BRANCHING.\n",
+                            all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
+
+                    branch();
+
+                    // primary: require that all_occupiers[j] not dislodged by j_potential_trader
+                    add_not_dislodged_by_condition(all_occupiers[j],all_occupiers[j]->check_move_target());
+
+                    // alternate: all_occupiers[j] does nothing
+                    DiplomacyPiece *alt_j_occ = alternate->find_copied_piece(all_occupiers[j]);
+                    alt_j_occ->check_move_target()->remove_attacker(alt_j_occ);
+                    alt_j_occ->change_to_hold();
+
+                    if (all_occupiers[j]->check_move_type() == 2) {
+                        // potential for actual place trade
+                        bool j_occ_coastal = all_occupiers[j]->check_location()->check_coasts().size() > 0;
+                        bool j_pot_coastal = j_potential_trader->check_location()->check_coasts().size() > 0;
+
+                        // if both aren't coastal, they can't change places
+                        if (!(j_occ_coastal && j_pot_coastal)) {
+                            fprintf(stderr,"Non-coastal units in %s and %s trying to trade places. BRANCHING.\n",
+                                all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
+                            // branch off a copy
+                            branch();
+
+                            // primary: require that they don't succeed in trading places
+                            add_no_trade_condition(all_occupiers[j],j_potential_trader);
+
+                            // secondary: both attacks canceled
+                            DiplomacyPiece *alt_j_occ_2 = alternate->find_copied_piece(all_occupiers[j]);
+                            alt_j_occ_2->check_move_target()->remove_attacker(alt_j_occ_2);
+                            alt_j_occ_2->change_to_hold();
+
+                            DiplomacyPiece *alt_j_pot = alternate->find_copied_piece(j_potential_trader);
+                            alt_j_pot->check_move_target()->remove_attacker(alt_j_pot);
+                            alt_j_pot->change_to_hold();
+                        }
+
+                        // otherwise, at least one of them needs a convoy
+                        else {
+                            fprintf(stderr,"Coastal units in %s and %s trying to trade places. BRANCHING.",
+                                all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
+                            
+                            branch();
+
+                            // primary: options: no trade, or at least one has a convoy
+                            add_no_trade_or_convoy_condition(all_occupiers[j],j_potential_trader);
+
+                            // alternate: both attacks canceled
+                            DiplomacyPiece *alt_j_occ = alternate->find_copied_piece(all_occupiers[j]);
+                            alt_j_occ->check_move_target()->remove_attacker(alt_j_occ);
+                            alt_j_occ->change_to_hold();
+
+                            DiplomacyPiece *alt_j_pot = alternate->find_copied_piece(j_potential_trader);
+                            alt_j_pot->check_move_target()->remove_attacker(alt_j_pot);
+                            alt_j_pot->change_to_hold();
+                        }
+                    }
                 }
             }
 
@@ -367,25 +440,16 @@ void DiplomacyGame::resolve() {
                     all_occupiers[j]->check_move_type() == 2) {
                 // TODO: if both aren't coastal just fail it
                 
-                // branch off a copy
-                DiplomacyGame *branch = new DiplomacyGame(*this);
-                branch->alternate = alternate;
-                alternate = branch;
+                branch();
 
                 // primary: require convoy
                 add_convoy_condition(all_occupiers[j],all_occupiers[j]->check_location(),all_occupiers[j]->check_move_target());
 
                 // alternate: piece cannot attack
-                DiplomacyPiece *alt_piece = alternate->get_player_by_num(alternate->get_player_num_by_name(
-                        all_occupiers[j]->check_owner()->check_name()))->check_pieces()[all_occupiers[j]->check_self_num()];
+                DiplomacyPiece *alt_piece = alternate->find_copied_piece(all_occupiers[j]);
                 alt_piece->check_move_target()->remove_attacker(alt_piece);
-                alt_piece->set_move_type(0);
-                alt_piece->set_move_target(alt_piece->check_location());
-                alt_piece->check_location()->set_occupier_defending(true);
-            }
-
-            // TODO: trading places stuff
-
+                alt_piece->change_to_hold();
+            }            
         }
 
         // fleets cannot be convoyed, non-coastal regions cannot be convoyed out of or into
@@ -428,7 +492,7 @@ void DiplomacyGame::resolve() {
                         continue;
                     }
                     // if the supporter being attacked isn't adjacent, we need to deal with the convoy case
-                    if (k_supported->occupied() && !check_if_adj(all_occupiers[j]->check_location(),all_occupiers[j]->check_move_target())) {
+                    if (k_supported->occupied() && !check_if_adj(all_occupiers[j]->check_location(),all_occupiers[j]->check_move_target())){
                         if (k_supported->check_occupier()->check_move_type() == 4) {
                             DiplomacyPiece *k_convoyer = k_supported->check_occupier();
                             bool convoyingfrom = false;
@@ -440,33 +504,25 @@ void DiplomacyGame::resolve() {
                                 }
                             }
                             if (convoyingfrom) {
-                                fprintf(stderr,"Piece in %s trying to cut support from %s against its convoy in %s. Branching.\n",
+                                fprintf(stderr,"Piece in %s trying to cut support from %s against its convoy in %s. BRANCHING.\n",
                                         all_occupiers[j]->check_location()->check_names()[0], to_cut[k]->check_location()->check_names()[0],
                                         k_convoyer->check_location()->check_names()[0]);
-                                // branch off a copy
-                                DiplomacyGame *branch = new DiplomacyGame(*this);
-                                branch->alternate = alternate;
-                                alternate = branch;
+                                
+                                branch();
 
                                 // primary: cut support, cut convoy, require convoy
                                 to_cut[k]->check_move_target()->remove_support(to_cut[k]);
-                                to_cut[k]->set_move_type(0);
-                                to_cut[k]->set_move_target(to_cut[k]->check_location());
-                                to_cut[k]->check_location()->set_occupier_defending(true);
+                                to_cut[k]->change_to_hold();
 
                                 k_convoyer->check_move_target()->remove_convoy(k_convoyer);
-                                k_convoyer->set_move_type(0);
-                                k_convoyer->set_move_target(k_convoyer->check_location());
-                                k_convoyer->check_location()->set_occupier_defending(true);
+                                k_convoyer->change_to_hold();
 
                                 add_convoy_condition(all_occupiers[j],all_occupiers[j]->check_location(),
                                                                     all_occupiers[j]->check_move_target());
 
                                 // alternate: cut neither, declare this attack/support pair safe
-                                DiplomacyPiece *alt_attacker = alternate->get_player_by_num(alternate->get_player_num_by_name(
-                                        all_occupiers[j]->check_owner()->check_name()))->check_pieces()[all_occupiers[j]->check_self_num()];
-                                DiplomacyPiece *alt_to_cut_k = alternate->get_player_by_num(alternate->get_player_num_by_name(
-                                        to_cut[k]->check_owner()->check_name()))->check_pieces()[to_cut[k]->check_self_num()];
+                                DiplomacyPiece *alt_attacker = alternate->find_copied_piece(all_occupiers[j]);
+                                DiplomacyPiece *alt_to_cut_k = alternate->find_copied_piece(to_cut[k]);
                                 alternate->add_safe_support(alt_attacker, alt_to_cut_k);
 
                                 continue;
@@ -476,9 +532,7 @@ void DiplomacyGame::resolve() {
                     fprintf(stderr,"Piece in %s cuts support coming from %s.\n", all_occupiers[j]->check_location()->check_names()[0],
                             to_cut[k]->check_location()->check_names()[0]);
                     to_cut[k]->check_move_target()->remove_support(to_cut[k]);
-                    to_cut[k]->set_move_type(0);
-                    to_cut[k]->set_move_target(to_cut[k]->check_location());
-                    to_cut[k]->check_location()->set_occupier_defending(true);
+                    to_cut[k]->change_to_hold();
                 }
             }
         }
@@ -506,10 +560,20 @@ void DiplomacyGame::resolve() {
         for (int j = 0; j < i_att_support.size(); ++j) {
             for (int k = 0; k < i_attackers.size(); ++k) {
                 if (i_attackers[k] == i_att_support[j]->supported) {
-                    fprintf(stderr,"Support found for %s's unit %d by %s's unit %d.\n", i_attackers[k]->check_owner()->check_name(),
+                    // branch on whether the support still exists
+                    fprintf(stderr,"Support found for %s's unit %d by %s's unit %d. BRANCHING.\n",
+                        i_attackers[k]->check_owner()->check_name(),
                             i_attackers[k]->check_self_num(), i_att_support[j]->supporter->check_owner()->check_name(),
                             i_att_support[j]->supporter->check_self_num());
                     attack_power[k] += 1;
+
+                    branch();
+                    // primary: require that support is still there
+                    add_support_condition(iter_regions[i],i_att_support[j]);
+                    // secondary: cut the support
+                    DiplomacyPiece *alt_i_att_supp_j = alternate->find_copied_piece(i_att_support[j]->supporter);
+                    alt_i_att_supp_j->check_move_target()->remove_support(alt_i_att_supp_j);
+                    alt_i_att_supp_j->change_to_hold();
                 }
             }
         }
@@ -525,9 +589,18 @@ void DiplomacyGame::resolve() {
                         defender->check_self_num(), iter_regions[i]->check_names()[0]);
             for (int j = 0; j < i_def_support.size(); ++j) {
                 if (i_def_support[j]->supported == defender) {
-                    fprintf(stderr,"Support found for defender by %s's unit %d.\n", i_def_support[j]->supporter->check_owner()->check_name(),
-                            i_def_support[j]->supporter->check_self_num());
+                    // branch on whether the support still exists
+                    fprintf(stderr,"Support found for defender by %s's unit %d. BRANCHING.\n",
+                            i_def_support[j]->supporter->check_owner()->check_name(), i_def_support[j]->supporter->check_self_num());
                     defense_power += 1;
+
+                    branch();
+                    // primary: require that support is still there
+                    add_support_condition(iter_regions[i],i_def_support[j]);
+                    // secondary: cut the support
+                    DiplomacyPiece *alt_i_def_supp_j = alternate->find_copied_piece(i_def_support[j]->supporter);
+                    alt_i_def_supp_j->check_move_target()->remove_support(alt_i_def_supp_j);
+                    alt_i_def_supp_j->change_to_hold();
                 }
                 else {
                     fprintf(stderr,"%s's unit %d trying to support non-defending %s's unit %d.\n",
@@ -554,26 +627,13 @@ void DiplomacyGame::resolve() {
             }
         }
 
-        // TODO what if defender = NULL?
         // if there is more than one winner or tie or defense wins, nothing happens
         if (winning_attackers.size() > 1 || (max_att_power <= defense_power && defense_move_type != 2)) {
             fprintf(stderr,"Standoff or defense win in %s.\n",iter_regions[i]->check_names()[0]);
             for (int j = 0; j < i_attackers.size(); ++j) {
-                i_attackers[j]->set_move_type(0);
-                i_attackers[j]->set_move_target(i_attackers[j]->check_location());
-                i_attackers[j]->check_location()->set_occupier_defending(true);
+                i_attackers[j]->change_to_hold();
             }
-            for (int j = 0; j < i_att_support.size(); ++j) {
-                i_att_support[j]->supporter->set_move_type(0);
-                i_att_support[j]->supporter->set_move_target(i_att_support[j]->supporter->check_location());
-                i_att_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            for (int j = 0; j < i_def_support.size(); ++j) {
-                i_def_support[j]->supporter->set_move_type(0);
-                i_def_support[j]->supporter->set_move_target(i_def_support[j]->supporter->check_location());
-                i_def_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            iter_regions[i]->clear_move_records_no_convoy();
+            iter_regions[i]->clear_attacker_records();
             continue;
         }
 
@@ -585,42 +645,26 @@ void DiplomacyGame::resolve() {
             winning_attackers[0]->check_location()->remove_piece(winning_attackers[0]);
             winning_attackers[0]->check_move_target()->add_piece(winning_attackers[0]);
             winning_attackers[0]->set_location(winning_attackers[0]->check_move_target());
-            winning_attackers[0]->set_move_type(0);
-            winning_attackers[0]->set_move_target(winning_attackers[0]->check_location());
+            winning_attackers[0]->change_to_hold();
             for (int j = 0; j < i_attackers.size(); ++j) {
                 if (i_attackers[j] == winning_attackers[0]) {
                     continue;
                 }
-                i_attackers[j]->set_move_type(0);
-                i_attackers[j]->set_move_target(i_attackers[j]->check_location());
-                i_attackers[j]->check_location()->set_occupier_defending(true);
+                i_attackers[j]->change_to_hold();
             }
-            for (int j = 0; j < i_att_support.size(); ++j) {
-                i_att_support[j]->supporter->set_move_type(0);
-                i_att_support[j]->supporter->set_move_target(i_att_support[j]->supporter->check_location());
-                i_att_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            for (int j = 0; j < i_def_support.size(); ++j) {
-                i_def_support[j]->supporter->set_move_type(0);
-                i_def_support[j]->supporter->set_move_target(i_def_support[j]->supporter->check_location());
-                i_def_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            iter_regions[i]->clear_move_records_no_convoy();
+            iter_regions[i]->clear_attacker_records();
             if (defender != NULL) {
                 // if defender is attacking somewhere else, branch on whether they get out
                 if (defender->check_move_type() == 2) {
-                    fprintf(stderr,"Attacker is winning in %s, defender might make it out. Branching.\n",iter_regions[i]->check_names()[0]);
-                    // branch off a copy
-                    DiplomacyGame *branch = new DiplomacyGame(*this);
-                    branch->alternate = alternate;
-                    alternate = branch;
+                    fprintf(stderr,"Attacker is winning in %s, defender might make it out. BRANCHING.\n",iter_regions[i]->check_names()[0]);
+                    
+                    branch();
 
                     // primary: require that defender makes it out
                     add_moved_condition(defender,defender->check_location());
 
                     // secondary: winner makes it in, defender is required to retreat
-                    DiplomacyPiece *alt_defender = alternate->get_player_by_num(alternate->get_player_num_by_name(
-                                    defender->check_owner()->check_name()))->check_pieces()[defender->check_self_num()];
+                    DiplomacyPiece *alt_defender = alternate->find_copied_piece(defender);
                     alternate->add_retreat(alt_defender);
                 }
 
@@ -630,8 +674,7 @@ void DiplomacyGame::resolve() {
                     // if defender is convoying, convoy is broken
                     if (defender->check_move_type() == 4) {
                         defender->check_move_target()->remove_convoy(defender);
-                        defender->set_move_type(0);
-                        defender->set_move_target(defender->check_location());
+                        defender->change_to_hold();
                     }
                     // TODO: problem here: dislodged supporter shouldn't affect region that dislodged him
                     // not sure how to deal with this yet
@@ -642,7 +685,7 @@ void DiplomacyGame::resolve() {
         }
         // if attack power weaker but defense trying to move out, branch on that condition
         else if (max_att_power <= defense_power && defense_move_type == 2) {
-            fprintf(stderr,"Attacker (%s's piece %d) wins in %s if defender gets out. Branching.\n",
+            fprintf(stderr,"Attacker (%s's piece %d) wins in %s if defender gets out. BRANCHING.\n",
                     winning_attackers[0]->check_owner()->check_name(), winning_attackers[0]->check_self_num(),
                     iter_regions[i]->check_names()[0]);
 
@@ -651,42 +694,24 @@ void DiplomacyGame::resolve() {
                 if (i_attackers[j] == winning_attackers[0]) {
                     continue;
                 }
-                i_attackers[j]->set_move_type(0);
-                i_attackers[j]->set_move_target(i_attackers[j]->check_location());
-                i_attackers[j]->check_location()->set_occupier_defending(true);
+                i_attackers[j]->change_to_hold();
             }
-            for (int j = 0; j < i_att_support.size(); ++j) {
-                i_att_support[j]->supporter->set_move_type(0);
-                i_att_support[j]->supporter->set_move_target(i_att_support[j]->supporter->check_location());
-                i_att_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            for (int j = 0; j < i_def_support.size(); ++j) {
-                i_def_support[j]->supporter->set_move_type(0);
-                i_def_support[j]->supporter->set_move_target(i_def_support[j]->supporter->check_location());
-                i_def_support[j]->supporter->check_location()->set_occupier_defending(true);
-            }
-            iter_regions[i]->clear_move_records_no_convoy();
+            iter_regions[i]->clear_attacker_records();
 
-            // branch off a copy
-            DiplomacyGame *branch = new DiplomacyGame(*this);
-            branch->alternate = alternate;
-            alternate = branch;
+            branch();
 
             // primary: attacker moves in, require defender gets out
             winning_attackers[0]->check_move_target()->add_piece(winning_attackers[0]);
             winning_attackers[0]->check_location()->remove_piece(winning_attackers[0]);
             winning_attackers[0]->set_location(winning_attackers[0]->check_move_target());
-            winning_attackers[0]->set_move_type(0);
-            winning_attackers[0]->set_move_target(winning_attackers[0]->check_location());
+            winning_attackers[0]->change_to_hold();
 
             add_moved_condition(defender,defender->check_location());
 
             // alternate: attacker stays put:
-            DiplomacyPiece *alt_win_att = alternate->get_player_by_num(alternate->get_player_num_by_name(winning_attackers[0]->
-                    check_owner()->check_name()))->check_pieces()[winning_attackers[0]->check_self_num()];
-            alt_win_att->set_move_type(0);
-            alt_win_att->set_move_target(alt_win_att->check_location());
-            alt_win_att->check_location()->set_occupier_defending(true);
+            DiplomacyPiece *alt_win_att = alternate->find_copied_piece(winning_attackers[0]);
+            alt_win_att->check_move_target()->remove_attacker(alt_win_att);
+            alt_win_att->change_to_hold();
         }
         else {
             fprintf(stderr,"ERROR: Unknown situation happening. HELP HELP.\n");
@@ -695,21 +720,50 @@ void DiplomacyGame::resolve() {
     // TODO: the rest of move resolution -- any more??
 }
 
+void DiplomacyGame::add_condition(conditiontype ctype) {
+    conditions.terms.push_back(OrCondition(this));
+    conditions.terms.back().factors.push_back(ConditionBox(this,ctype));
+}
+
 void DiplomacyGame::add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp) {
     safe_support newsafesupp = {att, safe_supp};
     safe_supports.push_back(newsafesupp);
 }
 
 void DiplomacyGame::add_convoy_condition(DiplomacyPiece *piece, DiplomacyRegion *fromp, DiplomacyRegion *top) {
-    conditions.terms.push_back(OrCondition(this));
-    conditions.terms.back().factors.push_back(ConditionBox(this,convoy_condition));
+    add_condition(convoy_condition);
     conditions.terms.back().factors.back().convoy_cond.push_back(ConvoyCondition(this, piece, fromp, top));
 }
 
+void DiplomacyGame::add_support_condition(DiplomacyRegion *region, support *req_support) {
+    add_condition(support_condition);
+    conditions.terms.back().factors.back().supp_cond.push_back(SupportCondition(this,region,req_support->supported,req_support->supporter));
+}
+
 void DiplomacyGame::add_moved_condition(DiplomacyPiece *piece, DiplomacyRegion *from) {
-    conditions.terms.push_back(OrCondition(this));
-    conditions.terms.back().factors.push_back(ConditionBox(this,moved_condition));
+    add_condition(moved_condition);
     conditions.terms.back().factors.back().moved_cond.push_back(MovedCondition(this,piece,from));
+}
+
+void DiplomacyGame::add_no_trade_condition(DiplomacyPiece *piece1p, DiplomacyPiece *piece2p) {
+    add_condition(no_trade_condition);
+    conditions.terms.back().factors.back().no_trade_cond.push_back(NoTradeCondition(this,piece1p,piece2p));
+}
+
+void DiplomacyGame::add_no_trade_or_convoy_condition(DiplomacyPiece *piece1, DiplomacyPiece *piece2) {
+    add_condition(no_trade_condition);
+    conditions.terms.back().factors.back().no_trade_cond.push_back(NoTradeCondition(this,piece1,piece2));
+    conditions.terms.back().factors.push_back(ConditionBox(this,convoy_condition));
+    conditions.terms.back().factors.back().convoy_cond.push_back(ConvoyCondition(this,piece1,piece1->check_location(),
+            piece1->check_move_target()));
+    conditions.terms.back().factors.push_back(ConditionBox(this,convoy_condition));
+    conditions.terms.back().factors.back().convoy_cond.push_back(ConvoyCondition(this,piece2,piece2->check_location(),
+            piece2->check_move_target()));
+}
+
+void DiplomacyGame::add_not_dislodged_by_condition(DiplomacyPiece *piecep, DiplomacyRegion *byp) {
+    add_condition(not_dislodged_condition);
+    conditions.terms.back().factors.back().not_disl_cond.push_back(NotDislodgedByCondition(this, piecep, byp));
 }
 
 bool DiplomacyGame::is_sea_path(DiplomacyRegion *start, DiplomacyRegion *end, const std::vector<DiplomacyRegion *>& steps) {
@@ -761,7 +815,7 @@ void DiplomacyGame::add_retreat(DiplomacyPiece *retreater) {
     req_retreats.push_back(retreater);
 }
 
-bool DiplomacyGame::pass() {
+DiplomacyGame *DiplomacyGame::pass() {
     return conditions.pass();
 }
 
