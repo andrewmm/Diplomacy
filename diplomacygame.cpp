@@ -339,6 +339,7 @@ void DiplomacyGame::resolve() {
                     fprintf(stderr,"Fleet or non-coastal army in %s tried to affect non-adjacent region %s.\n",
                             all_occupiers[j]->check_location()->check_names()[0],
                             all_occupiers[j]->check_move_target()->check_names()[0]);
+                    all_occupiers[j]->check_move_target()->remove_attacker(all_occupiers[j]);
                     all_occupiers[j]->set_move_type(0);
                     all_occupiers[j]->set_move_target(all_occupiers[j]->check_location());
                     all_occupiers[j]->check_location()->set_occupier_defending(true);
@@ -352,11 +353,39 @@ void DiplomacyGame::resolve() {
                     fprintf(stderr,"Army in %s tried to attack fleet in aquatic region %s.\n",
                         all_occupiers[j]->check_location()->check_names()[0],
                         all_occupiers[j]->check_move_target()->check_names()[0]);
+                    all_occupiers[j]->check_move_target()->remove_attacker(all_occupiers[j]);
                     all_occupiers[j]->set_move_type(0);
                     all_occupiers[j]->set_move_target(all_occupiers[j]->check_location());
                     all_occupiers[j]->check_location()->set_occupier_defending(true);
                 }
             }
+
+            // Coastal armies moving to non-adjacent regions must be convoyed
+            // Branch on existence of a convoy
+            if (all_occupiers[j]->check_type() == 0 &&
+                    !check_if_adj(all_occupiers[j]->check_move_target(),all_occupiers[j]->check_location()) &&
+                    all_occupiers[j]->check_move_type() == 2) {
+                // TODO: if both aren't coastal just fail it
+                
+                // branch off a copy
+                DiplomacyGame *branch = new DiplomacyGame(*this);
+                branch->alternate = alternate;
+                alternate = branch;
+
+                // primary: require convoy
+                add_convoy_condition(all_occupiers[j],all_occupiers[j]->check_location(),all_occupiers[j]->check_move_target());
+
+                // alternate: piece cannot attack
+                DiplomacyPiece *alt_piece = alternate->get_player_by_num(alternate->get_player_num_by_name(
+                        all_occupiers[j]->check_owner()->check_name()))->check_pieces()[all_occupiers[j]->check_self_num()];
+                alt_piece->check_move_target()->remove_attacker(alt_piece);
+                alt_piece->set_move_type(0);
+                alt_piece->set_move_target(alt_piece->check_location());
+                alt_piece->check_location()->set_occupier_defending(true);
+            }
+
+            // TODO: trading places stuff
+
         }
 
         // fleets cannot be convoyed, non-coastal regions cannot be convoyed out of or into
@@ -553,8 +582,8 @@ void DiplomacyGame::resolve() {
             fprintf(stderr,"Attacker (%s's piece %d) wins in %s.\n",winning_attackers[0]->check_owner()->check_name(),
                     winning_attackers[0]->check_self_num(), iter_regions[i]->check_names()[0]);
             // no matter what: winner makes it in, other attackers and supports set to hold move records (except convoys!) are cleared
-            winning_attackers[0]->check_move_target()->add_piece(winning_attackers[0]);
             winning_attackers[0]->check_location()->remove_piece(winning_attackers[0]);
+            winning_attackers[0]->check_move_target()->add_piece(winning_attackers[0]);
             winning_attackers[0]->set_location(winning_attackers[0]->check_move_target());
             winning_attackers[0]->set_move_type(0);
             winning_attackers[0]->set_move_target(winning_attackers[0]->check_location());

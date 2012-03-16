@@ -350,6 +350,7 @@ void DiplomacyRegion::cull_convoys() {
 }
 
 // eliminates all support comming from a non-adjacent region
+// TODO need to check if it's coming from region adjacent to a coast
 void DiplomacyRegion::cull_support() {
     for (int i = 0; i < attacking_support.size(); ++i) {
         if (!game->check_if_adj(attacking_support[i]->supporter->check_location(),this)) {
@@ -381,6 +382,10 @@ void DiplomacyRegion::cull_support() {
 
 // eliminates support structs relying on the passed in piece
 void DiplomacyRegion::remove_support(DiplomacyPiece *supporter) {
+    if (parent != NULL) {
+        parent->remove_support(supporter);
+        return;
+    }
     for (int i = 0; i < attacking_support.size(); ++i) {
         if (attacking_support[i]->supporter == supporter) {
             delete attacking_support[i];
@@ -399,10 +404,28 @@ void DiplomacyRegion::remove_support(DiplomacyPiece *supporter) {
 
 // eliminates convoy structs relying on the passed in piece
 void DiplomacyRegion::remove_convoy(DiplomacyPiece *convoyer) {
+    if (parent != NULL) {
+        parent->remove_convoy(convoyer);
+        return;
+    }
     for (int i = 0; i < attacking_convoys.size(); ++i) {
         if (attacking_convoys[i]->convoyer == convoyer) {
             delete attacking_convoys[i];
             attacking_convoys.erase(attacking_convoys.begin()+i);
+            --i;
+        }
+    }
+}
+
+// removes an attacking piece
+void DiplomacyRegion::remove_attacker(DiplomacyPiece *attacker) {
+    if (parent != NULL) {
+        parent->remove_attacker(attacker);
+        return;
+    }
+    for (int i = 0; i < attacking_pieces.size(); ++i) {
+        if (attacking_pieces[i] == attacker) {
+            attacking_pieces.erase(attacking_pieces.begin()+i);
             --i;
         }
     }

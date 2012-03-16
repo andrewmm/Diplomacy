@@ -230,6 +230,7 @@ public:
     void remove_support(DiplomacyPiece *supporter);
     void remove_convoy(DiplomacyPiece *convoyer);
     void remove_piece(DiplomacyPiece *piecep);
+    void remove_attacker(DiplomacyPiece *attacker);
 
     // access functions
     bool occupied();
