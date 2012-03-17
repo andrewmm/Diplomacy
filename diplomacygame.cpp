@@ -56,6 +56,12 @@ DiplomacyGame::DiplomacyGame(const DiplomacyGame& old) {
         safe_supports[i].attacker = find_copied_piece(old.safe_supports[i].attacker);
         safe_supports[i].safe_supporter = find_copied_piece(old.safe_supports[i].safe_supporter);
     }
+    dislodgments.resize(old.dislodgments.size(),NULL);
+    for (int i = 0; i < dislodgments.size(); ++i) {
+        dislodgments[i] = new dislodgment;
+        dislodgments[i]->dislodged = find_copied_piece(old.dislodgments[i]->dislodged);
+        dislodgments[i]->by = get_region_by_name(old.dislodgments[i]->by->check_names()[0]);
+    }
 }
 
 void DiplomacyGame::load_from_file(char *filename) {
@@ -85,6 +91,10 @@ void DiplomacyGame::clear_game() {
     while (!region_list.empty()) {
         delete region_list.back();
         region_list.pop_back();
+    }
+    while (!dislodgments.empty()) {
+        delete dislodgments.back();
+        dislodgments.pop_back();
     }
 }
 
@@ -288,7 +298,7 @@ DiplomacyPiece *DiplomacyGame::find_copied_piece(DiplomacyPiece *oldpiece) {
     return get_player_by_num(get_player_num_by_name(oldpiece->check_owner()->check_name()))->check_pieces()[oldpiece->check_self_num()];
 }
 
-std::vector<dislodgment> DiplomacyGame::check_dislodgments() {
+std::vector<dislodgment *> DiplomacyGame::check_dislodgments() {
     return dislodgments;
 }
 
@@ -412,7 +422,7 @@ void DiplomacyGame::resolve() {
 
                         // otherwise, at least one of them needs a convoy
                         else {
-                            fprintf(stderr,"Coastal units in %s and %s trying to trade places. BRANCHING.",
+                            fprintf(stderr,"Coastal units in %s and %s trying to trade places. BRANCHING.\n",
                                 all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
                             
                             branch();
@@ -642,7 +652,8 @@ void DiplomacyGame::resolve() {
             fprintf(stderr,"Attacker (%s's piece %d) wins in %s.\n",winning_attackers[0]->check_owner()->check_name(),
                     winning_attackers[0]->check_self_num(), iter_regions[i]->check_names()[0]);
             // no matter what: winner makes it in, other attackers and supports set to hold move records (except convoys!) are cleared
-            winning_attackers[0]->check_location()->remove_piece(winning_attackers[0]);
+            DiplomacyRegion *attack_source = winning_attackers[0]->check_location();
+            attack_source->remove_piece(winning_attackers[0]);
             winning_attackers[0]->check_move_target()->add_piece(winning_attackers[0]);
             winning_attackers[0]->set_location(winning_attackers[0]->check_move_target());
             winning_attackers[0]->change_to_hold();
@@ -656,8 +667,7 @@ void DiplomacyGame::resolve() {
             if (defender != NULL) {
                 // if defender is attacking somewhere else, branch on whether they get out
                 if (defender->check_move_type() == 2) {
-                    fprintf(stderr,"Attacker is winning in %s, defender might make it out. BRANCHING.\n",iter_regions[i]->check_names()[0]);
-                    
+                    fprintf(stderr,"Attacker is winning in %s, defender might make it out. BRANCHING.\n",iter_regions[i]->check_names()[0]);                    
                     branch();
 
                     // primary: require that defender makes it out
@@ -665,19 +675,20 @@ void DiplomacyGame::resolve() {
 
                     // secondary: winner makes it in, defender is required to retreat
                     DiplomacyPiece *alt_defender = alternate->find_copied_piece(defender);
+                    DiplomacyRegion *alt_att_source = alternate->get_region_by_name(attack_source->check_names()[0]);
                     alternate->add_retreat(alt_defender);
+                    alternate->add_dislodgment(alt_defender,attack_source);
                 }
 
                 // if defender is not attacking somewhere else, they have to dislodge
                 else {
                     fprintf(stderr,"Attacker is winning in %s, defender forced to retreat.\n",iter_regions[i]->check_names()[0]);
                     // if defender is convoying, convoy is broken
+                    add_dislodgment(defender,attack_source);
                     if (defender->check_move_type() == 4) {
                         defender->check_move_target()->remove_convoy(defender);
                         defender->change_to_hold();
                     }
-                    // TODO: problem here: dislodged supporter shouldn't affect region that dislodged him
-                    // not sure how to deal with this yet
 
                     add_retreat(defender);
                 }
@@ -728,6 +739,13 @@ void DiplomacyGame::add_condition(conditiontype ctype) {
 void DiplomacyGame::add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp) {
     safe_support newsafesupp = {att, safe_supp};
     safe_supports.push_back(newsafesupp);
+}
+
+void DiplomacyGame::add_dislodgment(DiplomacyPiece *disld, DiplomacyRegion *byp) {
+    dislodgment *new_disl = new dislodgment;
+    new_disl->dislodged = disld;
+    new_disl->by = byp;
+    dislodgments.push_back(new_disl);
 }
 
 void DiplomacyGame::add_convoy_condition(DiplomacyPiece *piece, DiplomacyRegion *fromp, DiplomacyRegion *top) {

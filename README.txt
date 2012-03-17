@@ -36,7 +36,7 @@ Diagram 9:
 ./diplomacy configs/d9config.dip orders/d9ord.dip
 
 Diagram 10:
- ./diplomacy configs/d10config.dip orders/d10ord.dip
+./diplomacy configs/d10config.dip orders/d10ord.dip
 
 Diagram 11:
 ./diplomacy configs/d11config.dip orders/d11ord.dip

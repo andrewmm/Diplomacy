@@ -164,8 +164,7 @@ private:
     DiplomacyGame *alternate;
     std::vector<safe_support> safe_supports;
     std::vector<DiplomacyPiece *> req_retreats;
-    std::vector<dislodgment> dislodgments; // TODO update copy constructor
-                                            // TODO populate this at appropriate times
+    std::vector<dislodgment *> dislodgments; // TODO update copy constructor
 public:
     DiplomacyGame(char *filename);
     DiplomacyGame();
@@ -195,12 +194,13 @@ public:
     bool check_if_supp_adj(DiplomacyRegion *source, DiplomacyRegion *target);
     DiplomacyGame *check_alternate();
     DiplomacyPiece *find_copied_piece(DiplomacyPiece *oldpiece);
-    std::vector<dislodgment> check_dislodgments();
+    std::vector<dislodgment *> check_dislodgments();
 
     // move handling
     void branch();
     void resolve();
     void add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp);
+    void add_dislodgment(DiplomacyPiece *disld, DiplomacyRegion *fromp);
 
     void add_condition(conditiontype ctype);
     void add_convoy_condition(DiplomacyPiece *piece, DiplomacyRegion *fromp, DiplomacyRegion *top);

@@ -27,7 +27,7 @@ DiplomacyGame *AndCondition::pass() {
 	DiplomacyGame *acc = NULL;
 	for (int i = 0; i < terms.size(); ++i) {
 		DiplomacyGame *step = terms[i].pass();
-		if (step != NULL && acc == NULL) {
+		if (step != NULL || acc == NULL) {
 			acc = step;
 		}
 	}
@@ -54,7 +54,7 @@ DiplomacyGame *OrCondition::pass() {
 			acc = step;
 			changed = true;
 		}
-		if (acc != NULL && step == NULL) {
+		if (acc != NULL) {
 			acc = step;
 		}
 	}
@@ -194,8 +194,8 @@ MovedCondition::MovedCondition(const MovedCondition& old, DiplomacyGame *newgame
 DiplomacyGame *MovedCondition::pass() {
 	bool res = piece->check_location() != from;
 	if (!res) {
-		fprintf(stderr,"FAILED MovedCondition: %s's piece %d did not leave %s.\n",piece->check_owner()->check_name(),
-			piece->check_self_num(),from->check_names()[0]);
+		fprintf(stderr,"FAILED MovedCondition: %s's piece %d did not leave %s. Alternate: %p\n",piece->check_owner()->check_name(),
+			piece->check_self_num(),from->check_names()[0],alternate);
 		return alternate;
 	}
 	return NULL;
@@ -252,10 +252,16 @@ NotDislodgedByCondition::NotDislodgedByCondition(const NotDislodgedByCondition& 
 }
 
 DiplomacyGame *NotDislodgedByCondition::pass() {
+	fprintf(stderr,"Checking NotDislodgedByCondition\n",piece);
 	bool acc = false;
-	std::vector<dislodgment> dislodgments = game->check_dislodgments();
+	std::vector<dislodgment *> dislodgments = game->check_dislodgments();
 	for (int i = 0; i < dislodgments.size(); ++i) {
-		acc = acc || (dislodgments[i].dislodged == piece && dislodgments[i].by == by);
+		bool found_coast = false;
+		for (int j = 0; j < by->check_coasts().size(); ++j) {
+			found_coast = found_coast || by->check_coasts()[j] == dislodgments[i]->by;
+		}
+		acc = acc || (dislodgments[i]->dislodged == piece && (dislodgments[i]->by == by || dislodgments[i]->by == by->check_parent()
+			|| found_coast)) ;
 	}
 	if (acc) {
 		fprintf(stderr,"FAILED NotDislodgedByCondition: %s's unit %d dislodged by piece in %s.\n",piece->check_owner()->check_name(),
