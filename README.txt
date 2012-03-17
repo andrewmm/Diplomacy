@@ -47,8 +47,23 @@ Diagram 12:
 Diagram 13:
 ./diplomacy configs/d13config.dip orders/d13ord.dip
 
+Diagram 14:
+./diplomacy configs/d14config.dip orders/d14ord.dip
+
 Diagram 15:
 ./diplomacy configs/d15config.dip orders/d15ger-ord.dip orders/d15rus-ord.dip
 
 Diagram 16:
 ./diplomacy configs/d15config.dip orders/d15ger-ord.dip orders/d16rus-ord.dip
+
+Diagram 17:
+./diplomacy configs/d17config.dip orders/d17ord.dip
+
+Diagram 18:
+./diplomacy configs/d18config.dip orders/d18ord.dip
+
+Diagram 19:
+./diplomacy configs/d19config.dip orders/d19ord.dip
+
+Diagram 20:
+./diplomacy configs/d20config.dip orders/d20ord.dip

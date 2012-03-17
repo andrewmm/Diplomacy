@@ -323,7 +323,6 @@ std::vector<dislodgment *> DiplomacyGame::check_dislodgments() {
 void DiplomacyGame::branch() {
     DiplomacyGame *branch = new DiplomacyGame(*this);
     alternate = branch;
-    fprintf(stderr,"Alternate: %p\n",alternate);
 }
 
 // TODO: in progress
@@ -709,21 +708,14 @@ void DiplomacyGame::resolve() {
                     // secondary: winner makes it in, defender is required to retreat
                     DiplomacyPiece *alt_defender = alternate->find_copied_piece(defender);
                     DiplomacyRegion *alt_att_source = alternate->get_region_by_name(attack_source->check_names()[0]);
-                    alternate->add_retreat(alt_defender);
-                    alternate->add_dislodgment(alt_defender,alt_att_source);
+                    alternate->dislodge_unit(alt_defender,alt_att_source);
                 }
 
                 // if defender is not attacking somewhere else, they have to dislodge
                 else {
                     fprintf(stderr,"Attacker is winning in %s, defender forced to retreat.\n",iter_regions[i]->check_names()[0]);
-                    // if defender is convoying, convoy is broken
-                    add_dislodgment(defender,attack_source);
-                    if (defender->check_move_type() == 4) {
-                        defender->check_move_target()->remove_convoy(defender);
-                        defender->change_to_hold();
-                    }
-
-                    add_retreat(defender);
+                    // if defender is convoying or support, convoy or support is broken
+                    dislodge_unit(defender,attack_source);
                 }
             }
         }
@@ -774,6 +766,19 @@ void DiplomacyGame::add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_s
     safe_supports.push_back(newsafesupp);
 }
 
+void DiplomacyGame::dislodge_unit(DiplomacyPiece *piece, DiplomacyRegion *fromp) {
+    if (piece->check_move_type() == 4) {
+        piece->check_move_target()->remove_convoy(piece);
+        piece->change_to_hold();
+    }
+    else if (piece->check_move_type() == 1 || piece->check_move_type() == 3) {
+        piece->check_move_target()->remove_support(piece);
+        piece->change_to_hold();
+    }
+    add_retreat(piece);
+    add_dislodgment(piece,fromp);
+}
+
 void DiplomacyGame::add_dislodgment(DiplomacyPiece *disld, DiplomacyRegion *byp) {
     dislodgment *new_disl = new dislodgment;
     new_disl->dislodged = disld;
@@ -821,12 +826,9 @@ bool DiplomacyGame::is_sea_path(DiplomacyRegion *start, DiplomacyRegion *end, co
     if (start == end) {
         return true;
     }
-    if (steps.empty()) {
-        return false;
-    }
 
     std::vector<DiplomacyRegion *> possibilities;
-    if (start->check_coasts().empty()) { // we're out to sea
+    if (start->check_coasts().empty()) { // we're out to sea - could be at the end
         std::vector<DiplomacyRegion *> adjacencies = start->check_adj_regions();
         for (int i = 0; i < adjacencies.size(); ++i) {
             if (!adjacencies[i]->check_coast()) {
@@ -837,6 +839,11 @@ bool DiplomacyGame::is_sea_path(DiplomacyRegion *start, DiplomacyRegion *end, co
             }
         }
     }
+
+    if (steps.empty()) {
+        return false;
+    }
+
     for (int i = 0; i < start->check_coasts().size(); ++i) { // should only be non-empty first time
         std::vector<DiplomacyRegion *> seas = start->check_coasts()[i]->check_adj_regions();
         for (int j = 0; j < seas.size(); ++j) {

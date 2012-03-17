@@ -201,6 +201,7 @@ public:
     void branch();
     void resolve();
     void add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp);
+    void dislodge_unit(DiplomacyPiece *piece, DiplomacyRegion *fromp);
     void add_dislodgment(DiplomacyPiece *disld, DiplomacyRegion *fromp);
 
     void add_condition(conditiontype ctype);

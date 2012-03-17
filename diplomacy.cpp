@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 		if (next == NULL) {
 			break;
 		}
-		printf("BRANCH DID NOT PASS. BACKTRACKING to %p.\n\n",next);
+		printf("BRANCH DID NOT PASS. BACKTRACKING.\n\n");
 		DiplomacyGame *temp = current;
 		current = next;
 	}
