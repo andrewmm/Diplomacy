@@ -57,6 +57,9 @@ DiplomacyGame *OrCondition::pass() {
 		if (acc != NULL) {
 			acc = step;
 		}
+		if (acc == NULL && changed) {
+			return acc;
+		}
 	}
 	return acc;
 }

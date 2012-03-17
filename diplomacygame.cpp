@@ -280,6 +280,19 @@ bool DiplomacyGame::check_if_adj(DiplomacyRegion *source, DiplomacyRegion *targe
     return false;
 }
 
+// returns true if reg1 and reg2 are part of the same region (i.e. region or any of its coasts)
+bool DiplomacyGame::same_region(DiplomacyRegion *reg1, DiplomacyRegion *reg2) {
+    DiplomacyRegion *par1 = reg1->check_parent();
+    if (par1 == NULL) {
+        par1 = reg1;
+    }
+    DiplomacyRegion *par2 = reg2->check_parent();
+    if (par2 == NULL) {
+        par2 = reg2;
+    }
+    return par1 == par2;
+}
+
 // returns true if the target or one of its coasts is adjcaent to the source
 bool DiplomacyGame::check_if_supp_adj(DiplomacyRegion *source, DiplomacyRegion *target) {
     bool acc = check_if_adj(source,target);
@@ -310,6 +323,7 @@ std::vector<dislodgment *> DiplomacyGame::check_dislodgments() {
 void DiplomacyGame::branch() {
     DiplomacyGame *branch = new DiplomacyGame(*this);
     alternate = branch;
+    fprintf(stderr,"Alternate: %p\n",alternate);
 }
 
 // TODO: in progress
@@ -376,24 +390,11 @@ void DiplomacyGame::resolve() {
                 }
             }
 
-            // TODO: trading places/affecting dislodger stuff
+            // trading places requires a convoy
             if (all_occupiers[j]->check_move_type() != 0 && all_occupiers[j]->check_move_target()->occupied()) {
                 DiplomacyPiece *j_potential_trader = all_occupiers[j]->check_move_target()->check_occupier();
                 if (j_potential_trader->check_move_type() == 2 && j_potential_trader->check_move_target()->check_occupier() == 
                         all_occupiers[j]) {
-                    // Potential for j_potential_trader to dislodge all_occupiers[j]. Branch on that
-                    fprintf(stderr,"Unit in %s could be dislodged by unit in %s. BRANCHING.\n",
-                            all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
-
-                    branch();
-
-                    // primary: require that all_occupiers[j] not dislodged by j_potential_trader
-                    add_not_dislodged_by_condition(all_occupiers[j],all_occupiers[j]->check_move_target());
-
-                    // alternate: all_occupiers[j] does nothing
-                    DiplomacyPiece *alt_j_occ = alternate->find_copied_piece(all_occupiers[j]);
-                    alt_j_occ->check_move_target()->remove_attacker(alt_j_occ);
-                    alt_j_occ->change_to_hold();
 
                     if (all_occupiers[j]->check_move_type() == 2) {
                         // potential for actual place trade
@@ -442,7 +443,6 @@ void DiplomacyGame::resolve() {
                     }
                 }
             }
-
             // Coastal armies moving to non-adjacent regions must be convoyed
             // Branch on existence of a convoy
             if (all_occupiers[j]->check_type() == 0 &&
@@ -467,6 +467,35 @@ void DiplomacyGame::resolve() {
 
         // support cannot be given to non-adjacent regions
         iter_regions[i]->cull_support();
+    }
+
+    // Non-dislodgment needs to have a higher priority
+    for (int i = 0; i < iter_regions.size(); ++i) {
+        if (!iter_regions[i]->occupied()) {
+            continue;
+        }
+        std::vector<DiplomacyPiece *> all_occupiers = iter_regions[i]->check_all_occupiers();
+        for (int j = 0; j < all_occupiers.size(); ++j) {
+            if (all_occupiers[j]->check_move_type() != 0 && all_occupiers[j]->check_move_target()->occupied()) {
+                DiplomacyPiece *j_potential_trader = all_occupiers[j]->check_move_target()->check_occupier();
+                if (j_potential_trader->check_move_type() == 2 && j_potential_trader->check_move_target()->check_occupier() == 
+                        all_occupiers[j]) {
+                    // Potential for j_potential_trader to dislodge all_occupiers[j]. Branch on that
+                    fprintf(stderr,"Unit in %s could be dislodged by unit in %s. BRANCHING.\n",
+                            all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
+
+                    branch();
+
+                    // primary: require that all_occupiers[j] not dislodged by j_potential_trader
+                    add_not_dislodged_by_condition(all_occupiers[j],all_occupiers[j]->check_move_target());
+
+                    // alternate: all_occupiers[j] does nothing
+                    DiplomacyPiece *alt_j_occ = alternate->find_copied_piece(all_occupiers[j]);
+                    alt_j_occ->check_move_target()->remove_attacker(alt_j_occ);
+                    alt_j_occ->change_to_hold();
+                }
+            }
+        }
     }
 
     fprintf(stderr,"Done checking for illegal moves.\nCutting support...\n");
@@ -670,8 +699,12 @@ void DiplomacyGame::resolve() {
                     fprintf(stderr,"Attacker is winning in %s, defender might make it out. BRANCHING.\n",iter_regions[i]->check_names()[0]);                    
                     branch();
 
-                    // primary: require that defender makes it out
+                    // primary: require that defender makes it out.
+                    // if defender attacking attacker's region, also add a convoy requirement
                     add_moved_condition(defender,defender->check_location());
+                    if (same_region(defender->check_move_target(),attack_source)) {
+                        add_convoy_condition(defender,defender->check_location(),defender->check_move_target());
+                    }
 
                     // secondary: winner makes it in, defender is required to retreat
                     DiplomacyPiece *alt_defender = alternate->find_copied_piece(defender);

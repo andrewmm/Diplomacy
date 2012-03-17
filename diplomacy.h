@@ -191,6 +191,7 @@ public:
     int get_player_num_by_email(char *email);
     DiplomacyRegion *get_region_by_name(char *name);
     bool check_if_adj(DiplomacyRegion *source, DiplomacyRegion *target);
+    bool same_region(DiplomacyRegion *reg1, DiplomacyRegion *reg2);
     bool check_if_supp_adj(DiplomacyRegion *source, DiplomacyRegion *target);
     DiplomacyGame *check_alternate();
     DiplomacyPiece *find_copied_piece(DiplomacyPiece *oldpiece);
