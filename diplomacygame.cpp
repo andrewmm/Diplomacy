@@ -677,7 +677,7 @@ void DiplomacyGame::resolve() {
                     DiplomacyPiece *alt_defender = alternate->find_copied_piece(defender);
                     DiplomacyRegion *alt_att_source = alternate->get_region_by_name(attack_source->check_names()[0]);
                     alternate->add_retreat(alt_defender);
-                    alternate->add_dislodgment(alt_defender,attack_source);
+                    alternate->add_dislodgment(alt_defender,alt_att_source);
                 }
 
                 // if defender is not attacking somewhere else, they have to dislodge

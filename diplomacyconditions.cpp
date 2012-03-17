@@ -194,7 +194,7 @@ MovedCondition::MovedCondition(const MovedCondition& old, DiplomacyGame *newgame
 DiplomacyGame *MovedCondition::pass() {
 	bool res = piece->check_location() != from;
 	if (!res) {
-		fprintf(stderr,"FAILED MovedCondition: %s's piece %d did not leave %s. Alternate: %p\n",piece->check_owner()->check_name(),
+		fprintf(stderr,"FAILED MovedCondition: %s's piece %d did not leave %s.\n",piece->check_owner()->check_name(),
 			piece->check_self_num(),from->check_names()[0],alternate);
 		return alternate;
 	}
