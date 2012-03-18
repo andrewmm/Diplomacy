@@ -91,3 +91,15 @@ Diagram 27:
 
 Diagram 28:
 ./diplomacy configs/d28config.dip orders/d28ord.dip
+
+Diagram 29:
+./diplomacy configs/d29config.dip orders/d29ord.dip
+
+Diagram 30:
+./diplomacy configs/d30config.dip orders/d30ord.dip
+
+Diagram 31:
+./diplomacy configs/d31config.dip orders/d31ord.dip
+
+Diagram 32:
+./diplomacy configs/d32config.dip orders/d32ord.dip
