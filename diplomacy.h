@@ -199,6 +199,9 @@ public:
 
     // move handling
     void branch();
+    void remove_illegal_moves(const std::vector<DiplomacyRegion *>& iter_regions);
+    void guarantee_non_dislodgments(const std::vector<DiplomacyRegion *>& iter_regions);
+    void cut_support(const std::vector<DiplomacyRegion *> iter_regions);
     void resolve();
     void add_safe_support(DiplomacyPiece *att, DiplomacyPiece *safe_supp);
     void dislodge_unit(DiplomacyPiece *piece, DiplomacyRegion *fromp);

@@ -325,23 +325,8 @@ void DiplomacyGame::branch() {
     alternate = branch;
 }
 
-// TODO: in progress
-void DiplomacyGame::resolve() {
-    // TODO: Implement 'no trading places without a convoy' rule
-    // TODO: implement 'non-adjacent attacks require convoys' rule
-    // both ^ should be in illegal move section
-
-    // We only want to iterate over non-coasts
-    std::vector<DiplomacyRegion *> iter_regions = region_list;
-    for (int i = 0; i < iter_regions.size(); ++i) {
-        if (iter_regions[i]->check_parent() != NULL) {
-            iter_regions.erase(iter_regions.begin()+i);
-            --i;
-        }
-    }
-
-    fprintf(stderr, "Checking for illegal moves...\n");
-    // Eliminate obviously illegal moves and set non-moves to holds
+// Eliminate obviously illegal moves and set non-moves to holds
+void DiplomacyGame::remove_illegal_moves(const std::vector<DiplomacyRegion *>& iter_regions) {
     for (int i = 0; i < iter_regions.size(); ++i) {
         if (!iter_regions[i]->occupied())
             continue;
@@ -467,8 +452,10 @@ void DiplomacyGame::resolve() {
         // support cannot be given to non-adjacent regions
         iter_regions[i]->cull_support();
     }
+}
 
-    // Non-dislodgment needs to have a higher priority
+// TODO: add comment
+void DiplomacyGame::guarantee_non_dislodgments(const std::vector<DiplomacyRegion *>& iter_regions) {
     for (int i = 0; i < iter_regions.size(); ++i) {
         if (!iter_regions[i]->occupied()) {
             continue;
@@ -476,16 +463,16 @@ void DiplomacyGame::resolve() {
         std::vector<DiplomacyPiece *> all_occupiers = iter_regions[i]->check_all_occupiers();
         for (int j = 0; j < all_occupiers.size(); ++j) {
             if (all_occupiers[j]->check_move_type() != 0 && all_occupiers[j]->check_move_target()->occupied()) {
-                DiplomacyPiece *j_potential_trader = all_occupiers[j]->check_move_target()->check_occupier();
-                if (j_potential_trader->check_move_type() == 2 && j_potential_trader->check_move_target()->check_occupier() == 
+                DiplomacyPiece *j_potential_dislodger = all_occupiers[j]->check_move_target()->check_occupier();
+                if (j_potential_dislodger->check_move_type() == 2 && j_potential_dislodger->check_move_target()->check_occupier() == 
                         all_occupiers[j]) {
-                    // Potential for j_potential_trader to dislodge all_occupiers[j]. Branch on that
+                    // Potential for j_potential_dislodger to dislodge all_occupiers[j]. Branch on that
                     fprintf(stderr,"Unit in %s could be dislodged by unit in %s. BRANCHING.\n",
-                            all_occupiers[j]->check_location()->check_names()[0],j_potential_trader->check_location()->check_names()[0]);
+                            all_occupiers[j]->check_location()->check_names()[0],j_potential_dislodger->check_location()->check_names()[0]);
 
                     branch();
 
-                    // primary: require that all_occupiers[j] not dislodged by j_potential_trader
+                    // primary: require that all_occupiers[j] not dislodged by j_potential_dislodger
                     add_not_dislodged_by_condition(all_occupiers[j],all_occupiers[j]->check_move_target());
 
                     // alternate: all_occupiers[j] does nothing
@@ -496,9 +483,10 @@ void DiplomacyGame::resolve() {
             }
         }
     }
+}
 
-    fprintf(stderr,"Done checking for illegal moves.\nCutting support...\n");
-    // Cut support, branching as necessary
+// Cut support, branching as necessary
+void DiplomacyGame::cut_support(const std::vector<DiplomacyRegion *> iter_regions) {
     for (int i = 0; i < iter_regions.size(); ++i) {
         if (!iter_regions[i]->occupied())
             continue;
@@ -553,16 +541,13 @@ void DiplomacyGame::resolve() {
                                 fprintf(stderr,"Piece in %s trying to cut support from %s against its convoy in %s. BRANCHING.\n",
                                         all_occupiers[j]->check_location()->check_names()[0], to_cut[k]->check_location()->check_names()[0],
                                         k_convoyer->check_location()->check_names()[0]);
-                                
                                 branch();
 
                                 // primary: cut support, cut convoy, require convoy
                                 to_cut[k]->check_move_target()->remove_support(to_cut[k]);
                                 to_cut[k]->change_to_hold();
-
                                 k_convoyer->check_move_target()->remove_convoy(k_convoyer);
                                 k_convoyer->change_to_hold();
-
                                 add_convoy_condition(all_occupiers[j],all_occupiers[j]->check_location(),
                                                                     all_occupiers[j]->check_move_target());
 
@@ -583,7 +568,28 @@ void DiplomacyGame::resolve() {
             }
         }
     }
+}
 
+// TODO: in progress
+void DiplomacyGame::resolve() {
+    // TODO: Implement 'no trading places without a convoy' rule
+    // TODO: implement 'non-adjacent attacks require convoys' rule
+    // both ^ should be in illegal move section
+
+    // We only want to iterate over non-coasts
+    std::vector<DiplomacyRegion *> iter_regions = region_list;
+    for (int i = 0; i < iter_regions.size(); ++i) {
+        if (iter_regions[i]->check_parent() != NULL) {
+            iter_regions.erase(iter_regions.begin()+i);
+            --i;
+        }
+    }
+
+    fprintf(stderr, "Checking for illegal moves...\n");
+    remove_illegal_moves(iter_regions);
+    guarantee_non_dislodgments(iter_regions);
+    fprintf(stderr,"Done checking for illegal moves.\nCutting support...\n");
+    cut_support(iter_regions);
     fprintf(stderr,"Done cutting support.\nConsidering attacks...\n");
 
     // Now we go one-by-one through each region
@@ -622,6 +628,7 @@ void DiplomacyGame::resolve() {
                             add_not_dislodged_by_condition(iter_regions[i]->check_occupier(),i_att_support[j]->supported->check_location());
                         }
                     }
+
                     // secondary: cut the support
                     DiplomacyPiece *alt_i_att_supp_j = alternate->find_copied_piece(i_att_support[j]->supporter);
                     alt_i_att_supp_j->check_move_target()->remove_support(alt_i_att_supp_j);
@@ -647,8 +654,10 @@ void DiplomacyGame::resolve() {
                     defense_power += 1;
 
                     branch();
+
                     // primary: require that support is still there
                     add_support_condition(iter_regions[i],i_def_support[j]);
+
                     // secondary: cut the support
                     DiplomacyPiece *alt_i_def_supp_j = alternate->find_copied_piece(i_def_support[j]->supporter);
                     alt_i_def_supp_j->check_move_target()->remove_support(alt_i_def_supp_j);
@@ -785,7 +794,6 @@ void DiplomacyGame::resolve() {
             fprintf(stderr,"ERROR: Unknown situation happening. HELP HELP.\n");
         }
     }
-    // TODO: the rest of move resolution -- any more??
 }
 
 void DiplomacyGame::add_condition(conditiontype ctype) {
