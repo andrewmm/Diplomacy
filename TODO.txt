@@ -4,4 +4,4 @@ Need to make sure we completely eliminate all traces of old move if a new move i
 
 Deal with syntax where another player's name is included (def. in convoy orders. maybe elsewhere?)
 
-Cannot cut support of own units
+Cannot support a move that is not occurring

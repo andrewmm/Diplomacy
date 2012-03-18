@@ -82,3 +82,12 @@ Diagram 24:
 
 Diagram 25:
 ./diplomacy configs/d25config.dip orders/d25ord.dip
+
+Diagram 26:
+./diplomacy configs/d26config.dip orders/d26ord.dip
+
+Diagram 27:
+./diplomacy configs/d27config.dip orders/d27ord.dip
+
+Diagram 28:
+./diplomacy configs/d28config.dip orders/d28ord.dip

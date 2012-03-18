@@ -62,13 +62,13 @@ DiplomacyGame *OrCondition::pass() {
         }
         if (acc == NULL && changed) {
             if (factors.size() > 1) {
-                fprintf(stderr,"--OrCondition %d--\n",factors.size());
+                fprintf(stderr,"--/OrCondition %d--\n",factors.size());
             }
             return acc;
         }
     }
     if (factors.size() > 1) {
-        fprintf(stderr,"--OrCondition %d--\n",factors.size());
+        fprintf(stderr,"--/OrCondition %d--\n",factors.size());
     }
     return acc;
 }
