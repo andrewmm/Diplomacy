@@ -522,6 +522,14 @@ void DiplomacyGame::resolve() {
                     if (to_cut[k]->check_move_type() != 1 && to_cut[k]->check_move_type() != 3) {
                         continue;
                     }
+
+                    if (to_cut[k]->check_owner() == all_occupiers[j]->check_owner()) {
+                        fprintf(stderr,"%s's piece in %s cannot cut support given by its own piece in %s.\n",all_occupiers[j]->
+                            check_owner()->check_name(),all_occupiers[j]->check_location()->check_names()[0],
+                            to_cut[k]->check_location()->check_names()[0]);
+                        continue;
+                    }
+                    
                     DiplomacyRegion *k_supported = to_cut[k]->check_move_target();
                     if (k_supported == iter_regions[i] || k_supported->check_parent() == iter_regions[i]) {
                         fprintf(stderr,"Piece in %s cannot cut support against itself from %s.\n",
@@ -608,6 +616,12 @@ void DiplomacyGame::resolve() {
                     branch();
                     // primary: require that support is still there
                     add_support_condition(iter_regions[i],i_att_support[j]);
+                    // if attacker/defender have the same owner, also require non-dislodgment
+                    if (iter_regions[i]->occupied()) {
+                        if (iter_regions[i]->check_occupier()->check_owner() == i_att_support[j]->supporter->check_owner()) {
+                            add_not_dislodged_by_condition(iter_regions[i]->check_occupier(),i_att_support[j]->supported->check_location());
+                        }
+                    }
                     // secondary: cut the support
                     DiplomacyPiece *alt_i_att_supp_j = alternate->find_copied_piece(i_att_support[j]->supporter);
                     alt_i_att_supp_j->check_move_target()->remove_support(alt_i_att_supp_j);
@@ -675,8 +689,16 @@ void DiplomacyGame::resolve() {
             continue;
         }
 
-        // if attack is stronger than defense, attack wins
-        else if (max_att_power > defense_power) {
+        bool att_def_same_owner = defender != NULL;
+        if (att_def_same_owner) {
+            att_def_same_owner = defender->check_owner() == winning_attackers[0]->check_owner();
+            if (att_def_same_owner) {
+                fprintf(stderr,"Attacker and defender have the same owner.\n");
+            }
+        }
+
+        // if attack is stronger than defense (and from a different player), attack wins
+        if (max_att_power > defense_power && !att_def_same_owner) {
             fprintf(stderr,"Attacker (%s's piece %d) wins in %s.\n",winning_attackers[0]->check_owner()->check_name(),
                     winning_attackers[0]->check_self_num(), iter_regions[i]->check_names()[0]);
             // no matter what: winner makes it in, other attackers and supports set to hold move records (except convoys!) are cleared
@@ -719,8 +741,9 @@ void DiplomacyGame::resolve() {
                 }
             }
         }
-        // if attack power weaker but defense trying to move out, branch on that condition
-        else if (max_att_power <= defense_power && defense_move_type == 2) {
+        // if attack power weaker (or from same player as defense) but defense trying to move out, branch on that condition
+        else if ((max_att_power <= defense_power || (att_def_same_owner && max_att_power > defense_power))
+                    && defense_move_type == 2) {
             fprintf(stderr,"Attacker (%s's piece %d) wins in %s if defender gets out. BRANCHING.\n",
                     winning_attackers[0]->check_owner()->check_name(), winning_attackers[0]->check_self_num(),
                     iter_regions[i]->check_names()[0]);
@@ -748,6 +771,15 @@ void DiplomacyGame::resolve() {
             DiplomacyPiece *alt_win_att = alternate->find_copied_piece(winning_attackers[0]);
             alt_win_att->check_move_target()->remove_attacker(alt_win_att);
             alt_win_att->change_to_hold();
+        }
+        // If winning attacker would dislodge same player's unit, nothing happens
+        else if (att_def_same_owner && max_att_power > defense_power) {
+            fprintf(stderr,"Winning attacker would have to dislodge defender owned by same player.\n");
+            for (int j = 0; j < i_attackers.size(); ++j) {
+                i_attackers[j]->change_to_hold();
+            }
+            iter_regions[i]->clear_attacker_records();
+            continue;
         }
         else {
             fprintf(stderr,"ERROR: Unknown situation happening. HELP HELP.\n");

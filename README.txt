@@ -67,3 +67,18 @@ Diagram 19:
 
 Diagram 20:
 ./diplomacy configs/d20config.dip orders/d20ord.dip
+
+Diagram 21:
+./diplomacy configs/d21config.dip orders/d21ord.dip
+
+Diagram 22:
+/diplomacy configs/d22config.dip orders/d22ord.dip
+
+Diagram 23:
+./diplomacy configs/d23config.dip orders/d23ord.dip
+
+Diagram 24:
+./diplomacy configs/d24config.dip orders/d24ord.dip
+
+Diagram 25:
+./diplomacy configs/d25config.dip orders/d25ord.dip
